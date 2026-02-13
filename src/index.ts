@@ -6,7 +6,7 @@
  * - Gong: Call recordings, transcripts, analytics, and coaching data
  * - ZoomInfo: Company firmographics, contact data, org charts, tech stacks
  * - Clay: Person and company enrichment via data waterfalls
- * - LinkedIn Sales Navigator: Lead search, profiles, and company research
+ * - LinkedIn: Lead search, profiles, and company research (standard API, no SNAP required)
  *
  * Each service registers its tools independently — you only need API keys
  * for the services you want to use. Tools gracefully error with setup
@@ -14,10 +14,6 @@
  *
  * Transport: stdio (for local Claude Desktop / Claude Code integration)
  */
-
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -27,21 +23,11 @@ import { registerZoomInfoTools } from "./tools/zoominfo-tools.js";
 import { registerClayTools } from "./tools/clay-tools.js";
 import { registerLinkedInTools } from "./tools/linkedin-tools.js";
 
-import { isGongConfigured } from "./services/gong-client.js";
-import { isZoomInfoConfigured } from "./services/zoominfo-client.js";
-import { isClayConfigured } from "./services/clay-client.js";
-import { isLinkedInConfigured } from "./services/linkedin-client.js";
-
-// ─── Read version from package.json ──────────────────────────
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const pkg = JSON.parse(readFileSync(resolve(__dirname, "..", "package.json"), "utf-8"));
-
 // ─── Server Initialization ────────────────────────────────────
 
 const server = new McpServer({
   name: "sales-intelligence-mcp-server",
-  version: pkg.version,
+  version: "1.0.0",
 });
 
 // ─── Register All Tool Groups ─────────────────────────────────
@@ -59,6 +45,12 @@ registerClayTools(server);
 registerLinkedInTools(server);
 
 // ─── Status Tool ──────────────────────────────────────────────
+
+import { z } from "zod";
+import { isGongConfigured } from "./services/gong-client.js";
+import { isZoomInfoConfigured } from "./services/zoominfo-client.js";
+import { isClayConfigured } from "./services/clay-client.js";
+import { isLinkedInConfigured } from "./tools/linkedin-tools.js";
 
 server.registerTool(
   "sales_intel_status",
@@ -80,24 +72,13 @@ Returns: Status of each service (configured/not configured) with required enviro
       {
         name: "Gong",
         configured: isGongConfigured(),
-        tools: [
-          "gong_search_calls",
-          "gong_get_transcript",
-          "gong_get_call_details",
-          "gong_search_calls_by_participant",
-          "gong_get_call_stats",
-        ],
+        tools: ["gong_search_calls", "gong_get_transcript", "gong_get_call_details", "gong_search_calls_by_participant", "gong_get_call_stats"],
         envVars: ["GONG_ACCESS_KEY", "GONG_ACCESS_KEY_SECRET"],
       },
       {
         name: "ZoomInfo",
         configured: isZoomInfoConfigured(),
-        tools: [
-          "zoominfo_search_company",
-          "zoominfo_search_contact",
-          "zoominfo_get_org_chart",
-          "zoominfo_get_tech_stack",
-        ],
+        tools: ["zoominfo_search_company", "zoominfo_search_contact", "zoominfo_get_org_chart", "zoominfo_get_tech_stack"],
         envVars: ["ZOOMINFO_CLIENT_ID", "ZOOMINFO_PRIVATE_KEY"],
       },
       {
@@ -107,7 +88,7 @@ Returns: Status of each service (configured/not configured) with required enviro
         envVars: ["CLAY_API_KEY"],
       },
       {
-        name: "LinkedIn Sales Navigator",
+        name: "LinkedIn",
         configured: isLinkedInConfigured(),
         tools: ["linkedin_search_leads", "linkedin_get_profile", "linkedin_search_companies"],
         envVars: ["LINKEDIN_ACCESS_TOKEN"],
@@ -118,7 +99,7 @@ Returns: Status of each service (configured/not configured) with required enviro
     let configuredCount = 0;
 
     for (const svc of services) {
-      const status = svc.configured ? "Connected" : "Not Configured";
+      const status = svc.configured ? "✅ Connected" : "❌ Not Configured";
       if (svc.configured) configuredCount++;
       lines.push(`## ${svc.name} — ${status}`);
       lines.push(`**Tools**: ${svc.tools.join(", ")}`);
@@ -128,12 +109,10 @@ Returns: Status of each service (configured/not configured) with required enviro
       lines.push("");
     }
 
-    lines.push(
-      `---\n**${configuredCount}/${services.length}** services connected. **${services.reduce((sum, s) => sum + s.tools.length, 0)}** tools registered.`,
-    );
+    lines.push(`---\n**${configuredCount}/${services.length}** services connected. **${services.reduce((sum, s) => sum + s.tools.length, 0)}** tools registered.`);
 
     return { content: [{ type: "text" as const, text: lines.join("\n") }] };
-  },
+  }
 );
 
 // ─── Start Server ─────────────────────────────────────────────
@@ -141,10 +120,8 @@ Returns: Status of each service (configured/not configured) with required enviro
 async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error(`Sales Intelligence MCP server v${pkg.version} running via stdio`);
-  console.error(
-    `Services: Gong=${isGongConfigured() ? "ok" : "off"} ZoomInfo=${isZoomInfoConfigured() ? "ok" : "off"} Clay=${isClayConfigured() ? "ok" : "off"} LinkedIn=${isLinkedInConfigured() ? "ok" : "off"}`,
-  );
+  console.error("Sales Intelligence MCP server running via stdio");
+  console.error(`Services: Gong=${isGongConfigured() ? "✓" : "✗"} ZoomInfo=${isZoomInfoConfigured() ? "✓" : "✗"} Clay=${isClayConfigured() ? "✓" : "✗"} LinkedIn=${isLinkedInConfigured() ? "✓" : "✗"}`);
 }
 
 main().catch((error) => {

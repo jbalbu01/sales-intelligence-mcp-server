@@ -1,136 +1,147 @@
 # Sales Intelligence MCP Server
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue?logo=typescript)](https://www.typescriptlang.org/)
-[![MCP SDK](https://img.shields.io/badge/MCP_SDK-1.6-purple)](https://modelcontextprotocol.io/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![CI](https://github.com/jbalbu01/sales-intelligence-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/jbalbu01/sales-intelligence-mcp-server/actions/workflows/ci.yml)
+Gives Claude access to your sales tools — Gong, ZoomInfo, Clay, and LinkedIn — so you can research prospects, pull call transcripts, and enrich leads right from Claude.
 
-A unified [Model Context Protocol](https://modelcontextprotocol.io/) server that gives AI assistants real-time access to your sales stack — **Gong**, **ZoomInfo**, **Clay**, and **LinkedIn Sales Navigator** — through 16 tools in a single integration.
+## Quick Install (1 command)
 
-## Why This Exists
-
-Sales teams live across four or five tabs. This server collapses them into one MCP integration so Claude can pull call transcripts, enrich a lead, check a company's tech stack, and find decision-makers — all in a single conversation.
-
-## Architecture
-
-```
-src/
-├── index.ts              # Server entry point & status tool
-├── constants.ts          # Shared API URLs, limits, timeouts
-├── types.ts              # TypeScript interfaces for all services
-├── services/
-│   ├── gong-client.ts        # Gong API — Basic Auth
-│   ├── zoominfo-client.ts    # ZoomInfo API — JWT with auto-refresh
-│   ├── clay-client.ts        # Clay API — API Key
-│   ├── linkedin-client.ts    # LinkedIn API — OAuth Bearer
-│   └── error-handler.ts      # Shared HTTP error handling
-└── tools/
-    ├── gong-tools.ts         # 5 tools — calls, transcripts, analytics
-    ├── zoominfo-tools.ts     # 4 tools — companies, contacts, org charts, tech
-    ├── clay-tools.ts         # 3 tools — person/company enrichment, webhooks
-    └── linkedin-tools.ts     # 3 tools — lead search, profiles, company search
-```
-
-**Key design decisions:**
-
-- **One service client per API** — each client manages its own auth strategy (Basic, JWT, API Key, OAuth Bearer).
-- **Graceful degradation** — tools for unconfigured services return setup instructions instead of crashing.
-- **Zod `.strict()` validation** — all tool inputs are validated; extra fields are rejected, not silently ignored.
-- **Response truncation** — long responses are truncated to stay within MCP payload limits (25 000 chars).
-
-## Tools (16 total)
-
-| Service | Tool | Description |
-|---------|------|-------------|
-| **Gong** | `gong_search_calls` | Search call recordings by date range, keywords, or filters |
-| | `gong_get_transcript` | Get the full transcript for a specific call |
-| | `gong_get_call_details` | Get metadata and participants for a call |
-| | `gong_search_calls_by_participant` | Find calls by email address |
-| | `gong_get_call_stats` | Get aggregate call analytics |
-| **ZoomInfo** | `zoominfo_search_company` | Search companies by name, domain, industry, size, tech |
-| | `zoominfo_search_contact` | Search contacts by name, title, company, seniority |
-| | `zoominfo_get_org_chart` | Get organizational hierarchy for a company |
-| | `zoominfo_get_tech_stack` | Get technology stack for a company |
-| **Clay** | `clay_enrich_person` | Enrich a person via email, LinkedIn URL, or name |
-| | `clay_enrich_company` | Enrich a company via domain or name |
-| | `clay_trigger_enrichment` | Trigger a Clay table webhook enrichment |
-| **LinkedIn** | `linkedin_search_leads` | Search leads by title, company, seniority, geography |
-| | `linkedin_get_profile` | Get a detailed LinkedIn profile |
-| | `linkedin_search_companies` | Search companies on LinkedIn |
-| **Status** | `sales_intel_status` | Check which services are configured |
-
-## Quick Start
-
-### Prerequisites
-
-- Node.js 20+
-- API credentials for one or more services (see below)
-
-### Install & Build
+Open Terminal and run:
 
 ```bash
-git clone https://github.com/jbalbu01/sales-intelligence-mcp-server.git
-cd sales-intelligence-mcp-server
+bash /path/to/mcp-server/install.sh
+```
+
+**That's it.** The script will:
+- Install the server to `~/sales-intelligence-mcp`
+- Find your Claude Desktop config automatically
+- Ask for your API keys (skip any you don't have)
+- Add everything to Claude's config for you
+
+Then just **restart Claude Desktop** and you're ready.
+
+---
+
+## Manual Setup (if you prefer)
+
+### Step 1: Install & Build
+
+```bash
+cd /path/to/mcp-server
 npm install
 npm run build
 ```
 
-### Configure
+### Step 2: Find Your Claude Config File
 
-Copy the example environment file and fill in credentials for the services you use:
+The config file is at:
 
+| OS | Location |
+|----|----------|
+| **Mac** | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| **Linux** | `~/.config/Claude/claude_desktop_config.json` |
+| **Windows** | `%APPDATA%\Claude\claude_desktop_config.json` |
+
+**Mac shortcut** — open it in TextEdit:
 ```bash
-cp .env.example .env
+open -a TextEdit ~/Library/Application\ Support/Claude/claude_desktop_config.json
 ```
 
-| Service | Variables | Where to get them |
-|---------|-----------|-------------------|
-| Gong | `GONG_ACCESS_KEY`, `GONG_ACCESS_KEY_SECRET` | Gong Settings > Integrations > API |
-| ZoomInfo | `ZOOMINFO_CLIENT_ID`, `ZOOMINFO_PRIVATE_KEY` | ZoomInfo Developer Portal |
-| Clay | `CLAY_API_KEY` | Clay Settings > API (Enterprise plan) |
-| LinkedIn | `LINKEDIN_ACCESS_TOKEN` | LinkedIn Developer Portal (SNAP required) |
+### Step 3: Add to Config
 
-You only need credentials for the services you want. Unconfigured services return setup instructions.
-
-### Connect to Claude Desktop
-
-Add to your `claude_desktop_config.json`:
+Add `"sales-intelligence"` inside the `"mcpServers"` section. If you already have other servers (like Docker), just add it alongside them with a comma:
 
 ```json
 {
   "mcpServers": {
+    "YOUR_EXISTING_SERVER": { "..." : "..." },
     "sales-intelligence": {
       "command": "node",
-      "args": ["/absolute/path/to/sales-intelligence-mcp-server/dist/index.js"],
+      "args": ["/Users/YOURNAME/sales-intelligence-mcp/dist/index.js"],
       "env": {
-        "GONG_ACCESS_KEY": "your-key",
-        "GONG_ACCESS_KEY_SECRET": "your-secret"
+        "GONG_ACCESS_KEY": "",
+        "GONG_ACCESS_KEY_SECRET": "",
+        "ZOOMINFO_CLIENT_ID": "",
+        "ZOOMINFO_PRIVATE_KEY": "",
+        "CLAY_API_KEY": "",
+        "LINKEDIN_ACCESS_TOKEN": ""
       }
     }
   }
 }
 ```
 
-### Connect to Claude Code
+**Important:** Replace `/Users/YOURNAME/` with your actual home folder path.
 
-```bash
-claude mcp add sales-intelligence node /absolute/path/to/dist/index.js \
-  -e GONG_ACCESS_KEY=your-key \
-  -e GONG_ACCESS_KEY_SECRET=your-secret
-```
+### Step 4: Add Your API Keys
 
-## Development
+Fill in the keys for whichever services you use. Leave the rest blank — they'll just show as "Not Configured" and you can add them later.
 
-```bash
-npm run dev          # Hot-reload with tsx
-npm run lint         # ESLint
-npm run format       # Prettier
-npm run typecheck    # tsc --noEmit
-npm test             # Vitest
-npm run test:coverage # Vitest with V8 coverage
-npm run build        # Compile to dist/
-```
+### Step 5: Restart Claude Desktop
+
+Quit Claude completely and reopen it. Check Settings → Connectors — you should see "sales-intelligence" listed.
+
+---
+
+## Getting API Keys
+
+| Service | Where to Get It |
+|---------|----------------|
+| **Gong** | Gong → Settings → Integrations → API → Create Access Key |
+| **ZoomInfo** | ZoomInfo Developer Portal → Create App → Client ID + Private Key |
+| **Clay** | Clay → Settings → API → Generate Key |
+| **LinkedIn** | LinkedIn Developer Portal → Create App → OAuth 2.0 token (standard developer account works, no SNAP needed) |
+
+---
+
+## What You Can Do
+
+Once connected, just ask Claude things like:
+
+- *"Search for VPs of Engineering at SaaS companies in San Francisco"*
+- *"Pull the transcript from my last call with Acme Corp"*
+- *"Enrich this lead: jane@example.com"*
+- *"What's the tech stack at Stripe?"*
+- *"Check my sales intelligence status"* (to see which services are connected)
+
+### All 16 Tools
+
+| Service | Tool | What It Does |
+|---------|------|-------------|
+| Gong | `gong_search_calls` | Search calls by date range |
+| Gong | `gong_get_transcript` | Get full call transcript |
+| Gong | `gong_get_call_details` | Topics, trackers, action items |
+| Gong | `gong_search_calls_by_participant` | Find calls by person |
+| Gong | `gong_get_call_stats` | Call analytics & stats |
+| ZoomInfo | `zoominfo_search_company` | Company firmographics |
+| ZoomInfo | `zoominfo_search_contact` | Contact lookup |
+| ZoomInfo | `zoominfo_get_org_chart` | Org chart for a company |
+| ZoomInfo | `zoominfo_get_tech_stack` | Tech stack lookup |
+| Clay | `clay_enrich_person` | Person enrichment |
+| Clay | `clay_enrich_company` | Company enrichment |
+| Clay | `clay_trigger_enrichment` | Webhook enrichment |
+| LinkedIn | `linkedin_search_leads` | Search people on LinkedIn |
+| LinkedIn | `linkedin_get_profile` | Get a LinkedIn profile |
+| LinkedIn | `linkedin_search_companies` | Search companies on LinkedIn |
+| Utility | `sales_intel_status` | Check which services are connected |
+
+---
+
+## Troubleshooting
+
+**"Module not found" error?**
+→ Run `cd ~/sales-intelligence-mcp && npm install` then restart Claude.
+
+**Server doesn't show in Claude?**
+→ Make sure the path in your config points to the actual `dist/index.js` file. Test it: `node ~/sales-intelligence-mcp/dist/index.js`
+
+**LinkedIn returns 401?**
+→ Your token may have expired. Generate a new one from the LinkedIn Developer Portal. Standard tokens (no SNAP) work fine.
+
+**Services show ✗ in status?**
+→ The API key for that service is missing or empty. Add it to your Claude config and restart.
+
+**Config file not found?**
+→ On Mac, open Terminal and run: `ls ~/Library/Application\ Support/Claude/`
 
 ## License
 
-[MIT](LICENSE) — Jose Balbuena
+MIT
